@@ -1,0 +1,48 @@
+pip install pybaseball
+
+import pandas as pd
+from pybaseball import statcast
+from pybaseball import cache
+import numpy as np
+import matplotlib.pyplot as plt
+
+data = statcast("2024-03-20", "2024-09-30")
+    
+# Print column names to debug issues
+print("Available columns:", data.columns)
+pd.DataFrame(columns=data.columns).to_csv("columns_only.csv", index=True)
+
+cache.enable()  # Enable caching for faster requests
+
+def get_pitchers_by_out_with_team(start_date, end_date, save_csv=False, filename="final_9_outs.csv"):
+    """Fetches pitchers who recorded each of the final 9 outs, organized by team, and optionally saves to CSV."""
+    print("🔄 Fetching Statcast data... This may take a moment.")
+    data = statcast(start_date, end_date)
+    
+    # Filter for 7th, 8th, and 9th innings
+    late_inning_data = data[data['inning'].isin([7, 8, 9])]
+
+    # Filter for plays that resulted in outs
+    out_events = ['strikeout', 'groundout', 'flyout', 'lineout', 'pop out', 'force out', 'double play', 'triple play']
+    outs_data = late_inning_data[late_inning_data['events'].isin(out_events)]
+    
+    # Identify which team the pitcher played for
+    outs_data['pitching_team'] = outs_data.apply(
+        lambda row: row['home_team'] if row['inning_topbot'] == 'Top' else row['away_team'], axis=1
+    )
+
+    # Count outs recorded per pitcher per inning
+    outs_data['out_number'] = outs_data.groupby(['game_pk', 'inning']).cumcount() + 1  # Assigns out 1, 2, 3 per inning
+    outs_tracking = outs_data[['game_pk', 'pitching_team', 'inning', 'out_number', 'player_name']]
+
+    # Save to CSV if requested
+    if save_csv:
+        outs_tracking.to_csv(filename, index=False)
+        print(f"✅ Data saved to {filename}")
+
+    return outs_tracking
+
+df = get_pitchers_by_out_with_team("2024-03-20", "2024-09-30", save_csv=True, filename="final_9_outs.csv")
+
+# Display first few rows
+print(df.head())
